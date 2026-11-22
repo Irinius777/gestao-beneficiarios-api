@@ -1,6 +1,6 @@
-# Ekan Beneficiarios
+# Gestão de Beneficiários API
 
-API REST para gerenciamento de beneficiarios de um plano de saude e seus documentos, desenvolvida como solucao para o desafio tecnico da Ekan.
+API REST para gerenciamento de beneficiários de um plano de saúde e seus documentos, desenvolvida como solução para o desafio técnico da Ekan.
 
 O projeto segue uma organizacao em camadas DDD, com a camada de apresentacao no padrao MVC, codigo de dominio isolado de detalhes de persistencia e testes automatizados cobrindo dominio, aplicacao, API e integracao com banco relacional.
 
@@ -65,7 +65,8 @@ Beneficiario 1 ───── * Documento
 
 - `id` (UUID)
 - `nome`
-- `telefone` (value object normalizado para 10 ou 11 digitos)
+- `cpf` (value object normalizado, validado e único)
+- `telefone` (value object normalizado para 10 ou 11 dígitos)
 - `dataNascimento`
 - `dataInclusao`
 - `dataAtualizacao`
@@ -74,12 +75,14 @@ Beneficiario 1 ───── * Documento
 **Documento**
 
 - `id` (UUID)
-- `tipoDocumento` (`CPF`, `RG`, `CNH`, `CERTIDAO_NASCIMENTO`, `COMPROVANTE_RESIDENCIA`, `OUTRO`)
+- `tipoDocumento` (`RG`, `CNH`, `CERTIDAO_NASCIMENTO`, `COMPROVANTE_RESIDENCIA`, `OUTRO`)
 - `descricao`
 - `dataInclusao`
 - `dataAtualizacao`
 
-`Beneficiario` e a raiz do agregado. `Documento` e uma entidade filha e so deve ser alterada por meio do agregado. A lista de documentos e imutavel fora do dominio.
+`Beneficiario` é a raiz do agregado. `Documento` é uma entidade filha e só deve ser alterada por meio do agregado. A lista de documentos é imutável fora do domínio.
+
+O CPF foi promovido a atributo do beneficiário por ser uma chave natural do negócio. Ele é validado no domínio (incluindo os dígitos verificadores), normalizado para apenas dígitos e protegido por uma constraint de unicidade no banco. Por isso, `CPF` não é mais aceito como `TipoDocumento`; os documentos ficam reservados para RG, CNH, certidão, comprovante e outros.
 
 ## Endpoints
 
@@ -90,6 +93,7 @@ Base URL: `http://localhost:8080`
 | `POST` | `/v1/beneficiarios` | Cadastra um beneficiario com seus documentos |
 | `GET` | `/v1/beneficiarios` | Lista todos os beneficiarios |
 | `GET` | `/v1/beneficiarios/{id}` | Busca um beneficiario por id |
+| `GET` | `/v1/beneficiarios/cpf/{cpf}` | Busca um beneficiario por CPF, com ou sem mascara |
 | `GET` | `/v1/beneficiarios/{id}/documentos` | Lista os documentos de um beneficiario |
 | `PUT` | `/v1/beneficiarios/{id}` | Atualiza os dados cadastrais do beneficiario |
 | `DELETE` | `/v1/beneficiarios/{id}` | Remove o beneficiario e seus documentos |
@@ -104,16 +108,17 @@ Content-Type: application/json
 ```json
 {
   "nome": "Maria da Silva",
+  "cpf": "529.982.247-25",
   "telefone": "(11) 99999-9999",
   "dataNascimento": "1990-05-20",
   "documentos": [
     {
-      "tipoDocumento": "CPF",
-      "descricao": "123.456.789-00"
-    },
-    {
       "tipoDocumento": "RG",
       "descricao": "12.345.678-9"
+    },
+    {
+      "tipoDocumento": "CNH",
+      "descricao": "12345678900"
     }
   ]
 }
@@ -125,6 +130,7 @@ Resposta `201 Created`:
 {
   "id": "3c1f0e6a-6d7b-4f1e-9c2a-0b7d5e4f8a11",
   "nome": "Maria da Silva",
+  "cpf": "52998224725",
   "telefone": "11999999999",
   "dataNascimento": "1990-05-20",
   "dataInclusao": "2026-01-15T10:00:00",
@@ -132,15 +138,15 @@ Resposta `201 Created`:
   "documentos": [
     {
       "id": "a1b2c3d4-1111-2222-3333-444455556666",
-      "tipoDocumento": "CPF",
-      "descricao": "123.456.789-00",
+      "tipoDocumento": "RG",
+      "descricao": "12.345.678-9",
       "dataInclusao": "2026-01-15T10:00:00",
       "dataAtualizacao": "2026-01-15T10:00:00"
     },
     {
       "id": "b2c3d4e5-2222-3333-4444-555566667777",
-      "tipoDocumento": "RG",
-      "descricao": "12.345.678-9",
+      "tipoDocumento": "CNH",
+      "descricao": "12345678900",
       "dataInclusao": "2026-01-15T10:00:00",
       "dataAtualizacao": "2026-01-15T10:00:00"
     }
@@ -163,7 +169,15 @@ Content-Type: application/json
 }
 ```
 
-A atualizacao altera apenas os dados cadastrais do beneficiario. Os documentos sao preservados e podem ser consultados pelo endpoint `/v1/beneficiarios/{id}/documentos`.
+A atualização altera apenas nome, telefone e data de nascimento. O CPF e os documentos são preservados; os documentos podem ser consultados pelo endpoint `/v1/beneficiarios/{id}/documentos`.
+
+### Exemplo de consulta por CPF
+
+```http
+GET /v1/beneficiarios/cpf/529.982.247-25
+```
+
+A mascara é opcional. O endpoint aceita `529.982.247-25` e `52998224725`. O CPF devolvido na resposta fica normalizado, apenas com dígitos.
 
 ### Erros
 
@@ -185,17 +199,20 @@ Os erros seguem o formato `ProblemDetail` do Spring:
 
 Status tratados:
 
-- `400 Bad Request`: dados invalidos, JSON malformado, UUID invalido ou regra de dominio violada.
-- `404 Not Found`: beneficiario inexistente.
+- `400 Bad Request`: dados invalidos, JSON malformado, UUID invalido, CPF invalido ou regra de dominio violada.
+- `404 Not Found`: beneficiario inexistente (por id ou por CPF).
+- `409 Conflict`: CPF ja cadastrado para outro beneficiario.
 - `500 Internal Server Error`: erro inesperado.
 
 ## Validacoes
 
 - `nome`: obrigatorio, no maximo 150 caracteres.
+- `cpf`: obrigatorio, 11 digitos apos normalizacao e digitos verificadores validos.
 - `telefone`: obrigatorio, deve conter 10 ou 11 digitos.
 - `dataNascimento`: obrigatoria e nao pode ser futura.
 - `documentos`: lista opcional; quando enviada, cada documento exige `tipoDocumento` e `descricao`.
 - `descricao` do documento: obrigatoria, no maximo 255 caracteres.
+- O CPF é unico no banco. A aplicacao verifica antes de salvar e o banco garante a regra em caso de concorrencia.
 
 ## Como executar
 
@@ -272,10 +289,10 @@ Para executar a verificacao completa do build:
 
 A suite cobre:
 
-- Regras de dominio do agregado `Beneficiario`, da entidade `Documento` e do value object `Telefone`.
-- Casos de uso da camada de aplicacao com Mockito e `Clock` fixo.
-- Contrato HTTP com `@WebMvcTest`, validacao, serializacao e tratamento de erros.
-- Integracao real com Spring, JPA e H2, incluindo persistencia, atualizacao, remocao em cascata e consultas.
+- Regras de dominio do agregado `Beneficiario`, da entidade `Documento` e dos value objects `Telefone` e `Cpf`.
+- Casos de uso da camada de aplicacao com Mockito e `Clock` fixo, incluindo CPF duplicado e consulta por CPF.
+- Contrato HTTP com `@WebMvcTest`, validacao, serializacao e tratamento de erros, incluindo `409` para CPF duplicado.
+- Integracao real com Spring, JPA e H2, incluindo persistencia, atualizacao, remocao em cascata, constraint unica de CPF e consultas.
 
 Os testes de integracao usam o profile `test` com H2 em memoria, isolado do banco de arquivo da aplicacao.
 
@@ -283,7 +300,8 @@ Os testes de integracao usam o profile `test` com H2 em memoria, isolado do banc
 
 - **DDD pragmatico**: o dominio e isolado de frameworks; a persistencia usa entidades JPA separadas e mappers explicitos.
 - **MVC na borda**: controllers recebem DTOs HTTP, traduzem para commands e devolvem responses. As regras nao ficam no controller.
-- **Agregado imutavel**: operacoes de atualizacao retornam uma nova instancia de `Beneficiario`, preservando id, data de inclusao e documentos.
+- **Agregado imutavel**: operacoes de atualizacao retornam uma nova instancia de `Beneficiario`, preservando id, CPF, data de inclusao e documentos.
+- **CPF como chave natural**: value object validado, coluna unica no banco, consulta dedicada e CPF imutavel via `PUT`.
 - **UUID como identificador**: evita dependencia de sequencia do banco e facilita a geracao no dominio.
 - **Clock injetado**: permite testar datas de inclusao e atualizacao de forma deterministica.
 - **H2 em arquivo**: atende ao requisito de banco relacional e mantem os dados entre reinicios. Em testes, o H2 e em memoria.
@@ -296,7 +314,7 @@ Os testes de integracao usam o profile `test` com H2 em memoria, isolado do banc
 - Adicionar autenticacao e autorizacao (Spring Security + JWT ou Basic Auth).
 - Adicionar paginacao e filtros na listagem de beneficiarios.
 - Criar endpoints para atualizar ou remover documentos individualmente.
-- Adicionar unicidade de CPF, caso essa regra seja desejada para o negocio.
+- Criar um fluxo especifico para correção de CPF, caso o negócio permita alterar a chave natural.
 - Adicionar testes de contrato com Testcontainers para um banco externo.
 
 ## CI
