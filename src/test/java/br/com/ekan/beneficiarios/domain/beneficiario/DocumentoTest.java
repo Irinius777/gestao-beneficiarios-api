@@ -13,10 +13,10 @@ class DocumentoTest {
 
     @Test
     void deveCriarDocumentoComDataDeInclusaoIgualDeAtualizacao() {
-        Documento documento = Documento.novo(TipoDocumento.CPF, "123.456.789-00", AGORA);
+        Documento documento = Documento.novo(TipoDocumento.RG, "123.456.789-00", AGORA);
 
         assertThat(documento.getId()).isNotNull();
-        assertThat(documento.getTipoDocumento()).isEqualTo(TipoDocumento.CPF);
+        assertThat(documento.getTipoDocumento()).isEqualTo(TipoDocumento.RG);
         assertThat(documento.getDescricao()).isEqualTo("123.456.789-00");
         assertThat(documento.getDataInclusao()).isEqualTo(AGORA);
         assertThat(documento.getDataAtualizacao()).isEqualTo(AGORA);
@@ -61,17 +61,17 @@ class DocumentoTest {
 
     @Test
     void deveRejeitarDataDeCriacaoNula() {
-        assertThatThrownBy(() -> Documento.novo(TipoDocumento.CPF, "123", null))
+        assertThatThrownBy(() -> Documento.novo(TipoDocumento.RG, "123", null))
                 .isInstanceOf(NullPointerException.class)
                 .hasMessageContaining("data/hora");
     }
 
     @Test
     void deveAtualizarDocumentoPreservandoIdEDataDeInclusao() {
-        Documento original = Documento.novo(TipoDocumento.CPF, "123", AGORA);
+        Documento original = Documento.novo(TipoDocumento.RG, "123", AGORA);
         LocalDateTime depois = AGORA.plusDays(1);
 
-        Documento atualizado = original.atualizar(TipoDocumento.CPF, "456", depois);
+        Documento atualizado = original.atualizar(TipoDocumento.RG, "456", depois);
 
         assertThat(atualizado.getId()).isEqualTo(original.getId());
         assertThat(atualizado.getDataInclusao()).isEqualTo(AGORA);
@@ -81,7 +81,7 @@ class DocumentoTest {
 
     @Test
     void deveCompararDocumentosPeloId() {
-        Documento original = Documento.novo(TipoDocumento.CPF, "123", AGORA);
+        Documento original = Documento.novo(TipoDocumento.RG, "123", AGORA);
         Documento mesmoId = new Documento(original.getId(), TipoDocumento.RG, "outro",
                 AGORA, AGORA);
 

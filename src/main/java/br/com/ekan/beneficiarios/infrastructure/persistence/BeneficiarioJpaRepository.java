@@ -16,4 +16,9 @@ public interface BeneficiarioJpaRepository extends JpaRepository<BeneficiarioJpa
     @Override
     @EntityGraph(attributePaths = "documentos")
     List<BeneficiarioJpaEntity> findAll();
+
+    @EntityGraph(attributePaths = "documentos")
+    Optional<BeneficiarioJpaEntity> findByCpf(String cpf);
+
+    boolean existsByCpf(String cpf);
 }

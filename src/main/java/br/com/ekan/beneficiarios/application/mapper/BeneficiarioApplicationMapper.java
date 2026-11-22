@@ -20,6 +20,7 @@ public final class BeneficiarioApplicationMapper {
         return new BeneficiarioResult(
                 beneficiario.getId().value(),
                 beneficiario.getNome(),
+                beneficiario.getCpf().value(),
                 beneficiario.getTelefone().value(),
                 beneficiario.getDataNascimento(),
                 beneficiario.getDataInclusao(),

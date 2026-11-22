@@ -5,7 +5,12 @@ import br.com.ekan.beneficiarios.application.command.CriarBeneficiarioCommand;
 import br.com.ekan.beneficiarios.application.command.DocumentoCommand;
 import br.com.ekan.beneficiarios.application.dto.BeneficiarioResult;
 import br.com.ekan.beneficiarios.application.service.BeneficiarioService;
+import br.com.ekan.beneficiarios.domain.beneficiario.Beneficiario;
 import br.com.ekan.beneficiarios.domain.beneficiario.BeneficiarioNaoEncontradoException;
+import br.com.ekan.beneficiarios.domain.beneficiario.BeneficiarioRepository;
+import br.com.ekan.beneficiarios.domain.beneficiario.Cpf;
+import br.com.ekan.beneficiarios.domain.beneficiario.CpfJaCadastradoException;
+import br.com.ekan.beneficiarios.domain.beneficiario.Telefone;
 import br.com.ekan.beneficiarios.domain.beneficiario.TipoDocumento;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -15,6 +20,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -25,8 +31,14 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 @ActiveProfiles("test")
 class BeneficiarioIntegrationTest {
 
+    private static final String CPF = "529.982.247-25";
+    private static final String OUTRO_CPF = "111.444.777-35";
+
     @Autowired
     private BeneficiarioService service;
+
+    @Autowired
+    private BeneficiarioRepository repository;
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
@@ -37,15 +49,16 @@ class BeneficiarioIntegrationTest {
         jdbcTemplate.update("DELETE FROM beneficiarios");
     }
 
-    private CriarBeneficiarioCommand criarCommand(String nome, String telefone,
+    private CriarBeneficiarioCommand criarCommand(String nome, String cpf, String telefone,
                                                   List<DocumentoCommand> documentos) {
-        return new CriarBeneficiarioCommand(nome, telefone, LocalDate.of(1990, 5, 20), documentos);
+        return new CriarBeneficiarioCommand(nome, cpf, telefone,
+                LocalDate.of(1990, 5, 20), documentos);
     }
 
     private CriarBeneficiarioCommand criarCommand(String nome) {
-        return criarCommand(nome, "(11) 99999-9999", List.of(
-                new DocumentoCommand(TipoDocumento.CPF, "123.456.789-00"),
-                new DocumentoCommand(TipoDocumento.RG, "12.345.678-9")
+        return criarCommand(nome, CPF, "(11) 99999-9999", List.of(
+                new DocumentoCommand(TipoDocumento.RG, "12.345.678-9"),
+                new DocumentoCommand(TipoDocumento.CNH, "12345678900")
         ));
     }
 
@@ -60,6 +73,7 @@ class BeneficiarioIntegrationTest {
 
         assertThat(criado.id()).isNotNull();
         assertThat(criado.nome()).isEqualTo("Maria da Silva");
+        assertThat(criado.cpf()).isEqualTo("52998224725");
         assertThat(criado.telefone()).isEqualTo("11999999999");
         assertThat(criado.documentos()).hasSize(2);
         assertThat(criado.dataInclusao()).isNotNull();
@@ -68,6 +82,10 @@ class BeneficiarioIntegrationTest {
         BeneficiarioResult buscado = service.buscarPorId(criado.id());
         assertThat(buscado.nome()).isEqualTo("Maria da Silva");
         assertThat(buscado.documentos()).hasSize(2);
+
+        BeneficiarioResult buscadoPorCpf = service.buscarPorCpf(CPF);
+        assertThat(buscadoPorCpf.id()).isEqualTo(criado.id());
+        assertThat(buscadoPorCpf.cpf()).isEqualTo("52998224725");
 
         assertThat(service.listar()).hasSize(1);
         assertThat(service.listarDocumentos(criado.id())).hasSize(2);
@@ -81,6 +99,7 @@ class BeneficiarioIntegrationTest {
 
         assertThat(atualizado.id()).isEqualTo(criado.id());
         assertThat(atualizado.nome()).isEqualTo("Maria Souza");
+        assertThat(atualizado.cpf()).isEqualTo(criado.cpf());
         assertThat(atualizado.telefone()).isEqualTo("11988888888");
         assertThat(atualizado.documentos()).hasSize(2);
         assertThat(atualizado.dataInclusao()).isEqualToIgnoringNanos(criado.dataInclusao());
@@ -96,7 +115,7 @@ class BeneficiarioIntegrationTest {
 
     @Test
     void deveCriarBeneficiarioSemDocumentos() {
-        BeneficiarioResult criado = service.criar(criarCommand("Maria", "11999999999", null));
+        BeneficiarioResult criado = service.criar(criarCommand("Maria", CPF, "11999999999", null));
 
         assertThat(criado.documentos()).isEmpty();
         assertThat(service.listarDocumentos(criado.id())).isEmpty();
@@ -104,8 +123,8 @@ class BeneficiarioIntegrationTest {
 
     @Test
     void deveListarBeneficiariosEmOrdemAlfabetica() {
-        service.criar(criarCommand("Zeca", "11999999999", List.of()));
-        service.criar(criarCommand("Ana", "11888888888", List.of()));
+        service.criar(criarCommand("Zeca", CPF, "11999999999", List.of()));
+        service.criar(criarCommand("Ana", OUTRO_CPF, "11888888888", List.of()));
 
         assertThat(service.listar())
                 .extracting(BeneficiarioResult::nome)
@@ -119,7 +138,7 @@ class BeneficiarioIntegrationTest {
         List<String> tipos = jdbcTemplate.queryForList(
                 "SELECT tipo_documento FROM documentos ORDER BY tipo_documento", String.class);
 
-        assertThat(tipos).containsExactly("CPF", "RG");
+        assertThat(tipos).containsExactly("CNH", "RG");
     }
 
     @Test
@@ -129,6 +148,62 @@ class BeneficiarioIntegrationTest {
 
         service.remover(criado.id());
 
+        assertThat(contarDocumentos()).isZero();
+    }
+
+    @Test
+    void deveRejeitarCpfDuplicadoSemPersistir() {
+        service.criar(criarCommand("Maria"));
+
+        assertThatThrownBy(() -> service.criar(criarCommand("Outra Maria")))
+                .isInstanceOf(CpfJaCadastradoException.class);
+
+        assertThat(service.listar()).hasSize(1);
+        assertThat(contarDocumentos()).isEqualTo(2);
+    }
+
+    @Test
+    void deveImpedirCpfDuplicadoNoBanco() {
+        service.criar(criarCommand("Maria"));
+
+        Beneficiario duplicado = Beneficiario.novo(
+                "Outra Maria",
+                new Cpf(CPF),
+                new Telefone("11999999999"),
+                LocalDate.of(1990, 5, 20),
+                List.of(),
+                LocalDateTime.now()
+        );
+
+        assertThatThrownBy(() -> repository.salvar(duplicado))
+                .isInstanceOf(CpfJaCadastradoException.class);
+
+        assertThat(service.listar()).hasSize(1);
+    }
+
+    @Test
+    void deveBuscarBeneficiarioPorCpfNormalizandoMascara() {
+        BeneficiarioResult criado = service.criar(criarCommand("Maria"));
+
+        BeneficiarioResult buscado = service.buscarPorCpf("529.982.247-25");
+
+        assertThat(buscado.id()).isEqualTo(criado.id());
+        assertThat(buscado.cpf()).isEqualTo("52998224725");
+    }
+
+    @Test
+    void deveLancarExcecaoAoBuscarCpfInexistente() {
+        assertThatThrownBy(() -> service.buscarPorCpf(OUTRO_CPF))
+                .isInstanceOf(BeneficiarioNaoEncontradoException.class);
+    }
+
+    @Test
+    void deveRejeitarCpfInvalidoSemPersistir() {
+        assertThatThrownBy(() -> service.criar(
+                criarCommand("Maria", "111.111.111-11", "11999999999", List.of())))
+                .isInstanceOf(IllegalArgumentException.class);
+
+        assertThat(service.listar()).isEmpty();
         assertThat(contarDocumentos()).isZero();
     }
 
@@ -159,7 +234,7 @@ class BeneficiarioIntegrationTest {
 
     @Test
     void deveRejeitarTelefoneInvalidoSemPersistir() {
-        assertThatThrownBy(() -> service.criar(criarCommand("Maria", "123", List.of())))
+        assertThatThrownBy(() -> service.criar(criarCommand("Maria", CPF, "123", List.of())))
                 .isInstanceOf(IllegalArgumentException.class);
 
         assertThat(service.listar()).isEmpty();
@@ -170,6 +245,7 @@ class BeneficiarioIntegrationTest {
     void deveRejeitarDataDeNascimentoFuturaSemPersistir() {
         CriarBeneficiarioCommand command = new CriarBeneficiarioCommand(
                 "Maria",
+                CPF,
                 "11999999999",
                 LocalDate.now().plusDays(1),
                 List.of()

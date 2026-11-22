@@ -9,6 +9,8 @@ import br.com.ekan.beneficiarios.domain.beneficiario.Beneficiario;
 import br.com.ekan.beneficiarios.domain.beneficiario.BeneficiarioId;
 import br.com.ekan.beneficiarios.domain.beneficiario.BeneficiarioNaoEncontradoException;
 import br.com.ekan.beneficiarios.domain.beneficiario.BeneficiarioRepository;
+import br.com.ekan.beneficiarios.domain.beneficiario.Cpf;
+import br.com.ekan.beneficiarios.domain.beneficiario.CpfJaCadastradoException;
 import br.com.ekan.beneficiarios.domain.beneficiario.Documento;
 import br.com.ekan.beneficiarios.domain.beneficiario.Telefone;
 import br.com.ekan.beneficiarios.domain.beneficiario.TipoDocumento;
@@ -41,6 +43,9 @@ class BeneficiarioApplicationServiceTest {
 
     private static final LocalDate NASCIMENTO = LocalDate.of(1990, 5, 20);
     private static final LocalDateTime AGORA = LocalDateTime.of(2026, 1, 15, 10, 0);
+    private static final String CPF = "529.982.247-25";
+    private static final String CPF_NORMALIZADO = "52998224725";
+    private static final String OUTRO_CPF = "11144477735";
 
     @Mock
     private BeneficiarioRepository repository;
@@ -54,25 +59,27 @@ class BeneficiarioApplicationServiceTest {
         service = new BeneficiarioApplicationService(repository, clock);
     }
 
-    private CriarBeneficiarioCommand criarCommand(String nome, String telefone,
+    private CriarBeneficiarioCommand criarCommand(String nome, String cpf, String telefone,
                                                   List<DocumentoCommand> documentos) {
-        return new CriarBeneficiarioCommand(nome, telefone, NASCIMENTO, documentos);
+        return new CriarBeneficiarioCommand(nome, cpf, telefone, NASCIMENTO, documentos);
     }
 
     private CriarBeneficiarioCommand criarCommand() {
-        return criarCommand("Maria da Silva", "(11) 99999-9999", List.of(
-                new DocumentoCommand(TipoDocumento.CPF, "123.456.789-00"),
-                new DocumentoCommand(TipoDocumento.RG, "12.345.678-9")
+        return criarCommand("Maria da Silva", CPF, "(11) 99999-9999", List.of(
+                new DocumentoCommand(TipoDocumento.RG, "12.345.678-9"),
+                new DocumentoCommand(TipoDocumento.CNH, "12345678900")
         ));
     }
 
-    private Beneficiario beneficiario(String nome, String telefone, List<Documento> documentos) {
-        return Beneficiario.novo(nome, new Telefone(telefone), NASCIMENTO, documentos, AGORA);
+    private Beneficiario beneficiario(String nome, String cpf, String telefone,
+                                      List<Documento> documentos) {
+        return Beneficiario.novo(nome, new Cpf(cpf), new Telefone(telefone),
+                NASCIMENTO, documentos, AGORA);
     }
 
     private Beneficiario beneficiario() {
-        return beneficiario("Maria da Silva", "(11) 99999-9999", List.of(
-                Documento.novo(TipoDocumento.CPF, "123.456.789-00", AGORA)
+        return beneficiario("Maria da Silva", CPF, "(11) 99999-9999", List.of(
+                Documento.novo(TipoDocumento.RG, "12.345.678-9", AGORA)
         ));
     }
 
@@ -87,6 +94,7 @@ class BeneficiarioApplicationServiceTest {
         Beneficiario salvo = captor.getValue();
 
         assertThat(salvo.getNome()).isEqualTo("Maria da Silva");
+        assertThat(salvo.getCpf().value()).isEqualTo(CPF_NORMALIZADO);
         assertThat(salvo.getTelefone().value()).isEqualTo("11999999999");
         assertThat(salvo.getDataNascimento()).isEqualTo(NASCIMENTO);
         assertThat(salvo.getDataInclusao()).isEqualTo(AGORA);
@@ -94,7 +102,7 @@ class BeneficiarioApplicationServiceTest {
         assertThat(salvo.getDocumentos()).hasSize(2);
         assertThat(salvo.getDocumentos())
                 .extracting(Documento::getTipoDocumento)
-                .containsExactly(TipoDocumento.CPF, TipoDocumento.RG);
+                .containsExactly(TipoDocumento.RG, TipoDocumento.CNH);
         assertThat(salvo.getDocumentos())
                 .allSatisfy(documento -> {
                     assertThat(documento.getId()).isNotNull();
@@ -103,6 +111,7 @@ class BeneficiarioApplicationServiceTest {
                 });
 
         assertThat(response.id()).isEqualTo(salvo.getId().value());
+        assertThat(response.cpf()).isEqualTo(CPF_NORMALIZADO);
         assertThat(response.documentos()).hasSize(2);
     }
 
@@ -110,25 +119,28 @@ class BeneficiarioApplicationServiceTest {
     void deveCriarBeneficiarioSemDocumentosQuandoListaForNula() {
         when(repository.salvar(any(Beneficiario.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        BeneficiarioResult response = service.criar(criarCommand("Maria", "11999999999", null));
+        BeneficiarioResult response = service.criar(
+                criarCommand("Maria", CPF, "11999999999", null));
 
         assertThat(response.documentos()).isEmpty();
     }
 
     @Test
-    void deveNormalizarNomeETelefoneAoCriar() {
+    void deveNormalizarNomeCpfETelefoneAoCriar() {
         when(repository.salvar(any(Beneficiario.class))).thenAnswer(inv -> inv.getArgument(0));
 
         BeneficiarioResult response = service.criar(
-                criarCommand("  Maria  ", "(11) 98888-7777", List.of()));
+                criarCommand("  Maria  ", CPF, "(11) 98888-7777", List.of()));
 
         assertThat(response.nome()).isEqualTo("Maria");
+        assertThat(response.cpf()).isEqualTo(CPF_NORMALIZADO);
         assertThat(response.telefone()).isEqualTo("11988887777");
     }
 
     @Test
     void deveRejeitarTelefoneInvalidoAntesDeSalvar() {
-        assertThatThrownBy(() -> service.criar(criarCommand("Maria", "123", List.of())))
+        assertThatThrownBy(() -> service.criar(
+                criarCommand("Maria", CPF, "123", List.of())))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("10 ou 11 digitos");
 
@@ -136,10 +148,31 @@ class BeneficiarioApplicationServiceTest {
     }
 
     @Test
+    void deveRejeitarCpfInvalidoAntesDeSalvar() {
+        assertThatThrownBy(() -> service.criar(
+                criarCommand("Maria", "11111111111", "11999999999", List.of())))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("invalido");
+
+        verifyNoInteractions(repository);
+    }
+
+    @Test
+    void deveRejeitarCpfDuplicadoAntesDeSalvar() {
+        when(repository.existePorCpf(any(Cpf.class))).thenReturn(true);
+
+        assertThatThrownBy(() -> service.criar(criarCommand()))
+                .isInstanceOf(CpfJaCadastradoException.class)
+                .hasMessageContaining("CPF ja cadastrado");
+
+        verify(repository, never()).salvar(any());
+    }
+
+    @Test
     void deveListarBeneficiariosEmOrdemAlfabetica() {
         when(repository.listarTodos()).thenReturn(List.of(
-                beneficiario("Zeca", "11999999999", List.of()),
-                beneficiario("Ana", "11888888888", List.of())
+                beneficiario("Zeca", CPF, "11999999999", List.of()),
+                beneficiario("Ana", OUTRO_CPF, "11888888888", List.of())
         ));
 
         List<BeneficiarioResult> response = service.listar();
@@ -164,7 +197,37 @@ class BeneficiarioApplicationServiceTest {
 
         assertThat(response.id()).isEqualTo(beneficiario.getId().value());
         assertThat(response.nome()).isEqualTo("Maria da Silva");
+        assertThat(response.cpf()).isEqualTo(CPF_NORMALIZADO);
         assertThat(response.documentos()).hasSize(1);
+    }
+
+    @Test
+    void deveBuscarBeneficiarioPorCpf() {
+        Beneficiario beneficiario = beneficiario();
+        when(repository.buscarPorCpf(new Cpf(CPF))).thenReturn(Optional.of(beneficiario));
+
+        BeneficiarioResult response = service.buscarPorCpf(CPF);
+
+        assertThat(response.id()).isEqualTo(beneficiario.getId().value());
+        assertThat(response.cpf()).isEqualTo(CPF_NORMALIZADO);
+    }
+
+    @Test
+    void deveLancarExcecaoAoBuscarCpfInexistente() {
+        when(repository.buscarPorCpf(any(Cpf.class))).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.buscarPorCpf(CPF))
+                .isInstanceOf(BeneficiarioNaoEncontradoException.class)
+                .hasMessageContaining("CPF");
+    }
+
+    @Test
+    void deveRejeitarCpfInvalidoAoBuscar() {
+        assertThatThrownBy(() -> service.buscarPorCpf("111.111.111-11"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("invalido");
+
+        verifyNoInteractions(repository);
     }
 
     @Test
@@ -185,7 +248,7 @@ class BeneficiarioApplicationServiceTest {
         List<DocumentoResult> documentos = service.listarDocumentos(beneficiario.getId().value());
 
         assertThat(documentos).hasSize(1);
-        assertThat(documentos.get(0).tipoDocumento()).isEqualTo(TipoDocumento.CPF);
+        assertThat(documentos.get(0).tipoDocumento()).isEqualTo(TipoDocumento.RG);
     }
 
     @Test
@@ -209,6 +272,7 @@ class BeneficiarioApplicationServiceTest {
 
         assertThat(response.id()).isEqualTo(original.getId().value());
         assertThat(response.nome()).isEqualTo("Maria Souza");
+        assertThat(response.cpf()).isEqualTo(CPF_NORMALIZADO);
         assertThat(response.telefone()).isEqualTo("11988888888");
         assertThat(response.dataNascimento()).isEqualTo(LocalDate.of(1992, 8, 10));
         assertThat(response.dataInclusao()).isEqualTo(AGORA);
@@ -218,6 +282,7 @@ class BeneficiarioApplicationServiceTest {
         ArgumentCaptor<Beneficiario> captor = ArgumentCaptor.forClass(Beneficiario.class);
         verify(repository).salvar(captor.capture());
         assertThat(captor.getValue().getId()).isEqualTo(original.getId());
+        assertThat(captor.getValue().getCpf()).isEqualTo(original.getCpf());
         assertThat(captor.getValue().getDocumentos()).isEqualTo(original.getDocumentos());
 
         assertThat(original.getNome()).isEqualTo("Maria da Silva");

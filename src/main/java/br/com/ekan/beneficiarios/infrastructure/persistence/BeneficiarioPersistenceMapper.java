@@ -2,6 +2,7 @@ package br.com.ekan.beneficiarios.infrastructure.persistence;
 
 import br.com.ekan.beneficiarios.domain.beneficiario.Beneficiario;
 import br.com.ekan.beneficiarios.domain.beneficiario.BeneficiarioId;
+import br.com.ekan.beneficiarios.domain.beneficiario.Cpf;
 import br.com.ekan.beneficiarios.domain.beneficiario.Documento;
 import br.com.ekan.beneficiarios.domain.beneficiario.DocumentoId;
 import br.com.ekan.beneficiarios.domain.beneficiario.Telefone;
@@ -16,6 +17,7 @@ public class BeneficiarioPersistenceMapper {
         BeneficiarioJpaEntity entity = new BeneficiarioJpaEntity(
                 beneficiario.getId().value(),
                 beneficiario.getNome(),
+                beneficiario.getCpf().value(),
                 beneficiario.getTelefone().value(),
                 beneficiario.getDataNascimento(),
                 beneficiario.getDataInclusao(),
@@ -43,6 +45,7 @@ public class BeneficiarioPersistenceMapper {
         return new Beneficiario(
                 new BeneficiarioId(entity.getId()),
                 entity.getNome(),
+                new Cpf(entity.getCpf()),
                 new Telefone(entity.getTelefone()),
                 entity.getDataNascimento(),
                 entity.getDataInclusao(),

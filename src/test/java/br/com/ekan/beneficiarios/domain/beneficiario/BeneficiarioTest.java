@@ -13,11 +13,12 @@ class BeneficiarioTest {
 
     private static final LocalDateTime AGORA = LocalDateTime.of(2026, 1, 15, 10, 0);
     private static final LocalDate NASCIMENTO = LocalDate.of(1990, 5, 20);
+    private static final String CPF = "52998224725";
 
     private List<Documento> documentos() {
         return List.of(
-                Documento.novo(TipoDocumento.CPF, "123.456.789-00", AGORA),
-                Documento.novo(TipoDocumento.RG, "12.345.678-9", AGORA)
+                Documento.novo(TipoDocumento.RG, "12.345.678-9", AGORA),
+                Documento.novo(TipoDocumento.CNH, "12345678900", AGORA)
         );
     }
 
@@ -25,6 +26,7 @@ class BeneficiarioTest {
     void deveCriarBeneficiarioComDocumentos() {
         Beneficiario beneficiario = Beneficiario.novo(
                 "Maria da Silva",
+                new Cpf(CPF),
                 new Telefone("(11) 99999-9999"),
                 NASCIMENTO,
                 documentos(),
@@ -33,6 +35,7 @@ class BeneficiarioTest {
 
         assertThat(beneficiario.getId()).isNotNull();
         assertThat(beneficiario.getNome()).isEqualTo("Maria da Silva");
+        assertThat(beneficiario.getCpf().value()).isEqualTo(CPF);
         assertThat(beneficiario.getTelefone().value()).isEqualTo("11999999999");
         assertThat(beneficiario.getDataNascimento()).isEqualTo(NASCIMENTO);
         assertThat(beneficiario.getDataInclusao()).isEqualTo(AGORA);
@@ -44,6 +47,7 @@ class BeneficiarioTest {
     void deveCriarBeneficiarioSemDocumentos() {
         Beneficiario beneficiario = Beneficiario.novo(
                 "Maria",
+                new Cpf(CPF),
                 new Telefone("11999999999"),
                 NASCIMENTO,
                 List.of(),
@@ -57,6 +61,7 @@ class BeneficiarioTest {
     void deveRemoverEspacosDoNome() {
         Beneficiario beneficiario = Beneficiario.novo(
                 "  Maria da Silva  ",
+                new Cpf(CPF),
                 new Telefone("11999999999"),
                 NASCIMENTO,
                 List.of(),
@@ -69,7 +74,7 @@ class BeneficiarioTest {
     @Test
     void deveRejeitarNomeNulo() {
         assertThatThrownBy(() -> Beneficiario.novo(
-                null, new Telefone("11999999999"), NASCIMENTO, List.of(), AGORA))
+                null, new Cpf(CPF), new Telefone("11999999999"), NASCIMENTO, List.of(), AGORA))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("nome");
     }
@@ -77,7 +82,7 @@ class BeneficiarioTest {
     @Test
     void deveRejeitarNomeEmBranco() {
         assertThatThrownBy(() -> Beneficiario.novo(
-                "   ", new Telefone("11999999999"), NASCIMENTO, List.of(), AGORA))
+                "   ", new Cpf(CPF), new Telefone("11999999999"), NASCIMENTO, List.of(), AGORA))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("nome");
     }
@@ -85,9 +90,17 @@ class BeneficiarioTest {
     @Test
     void deveRejeitarNomeMaiorQueLimite() {
         assertThatThrownBy(() -> Beneficiario.novo(
-                "x".repeat(151), new Telefone("11999999999"), NASCIMENTO, List.of(), AGORA))
+                "x".repeat(151), new Cpf(CPF), new Telefone("11999999999"), NASCIMENTO, List.of(), AGORA))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("150");
+    }
+
+    @Test
+    void deveRejeitarCpfNulo() {
+        assertThatThrownBy(() -> Beneficiario.novo(
+                "Maria", null, new Telefone("11999999999"), NASCIMENTO, List.of(), AGORA))
+                .isInstanceOf(NullPointerException.class)
+                .hasMessageContaining("cpf");
     }
 
     @Test
@@ -95,7 +108,7 @@ class BeneficiarioTest {
         LocalDate futura = LocalDate.now().plusDays(1);
 
         assertThatThrownBy(() -> Beneficiario.novo(
-                "Maria", new Telefone("11999999999"), futura, List.of(), AGORA))
+                "Maria", new Cpf(CPF), new Telefone("11999999999"), futura, List.of(), AGORA))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("futura");
     }
@@ -103,7 +116,7 @@ class BeneficiarioTest {
     @Test
     void deveRejeitarDataDeNascimentoNula() {
         assertThatThrownBy(() -> Beneficiario.novo(
-                "Maria", new Telefone("11999999999"), null, List.of(), AGORA))
+                "Maria", new Cpf(CPF), new Telefone("11999999999"), null, List.of(), AGORA))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("data de nascimento");
     }
@@ -111,7 +124,7 @@ class BeneficiarioTest {
     @Test
     void deveRejeitarListaDeDocumentosNula() {
         assertThatThrownBy(() -> Beneficiario.novo(
-                "Maria", new Telefone("11999999999"), NASCIMENTO, null, AGORA))
+                "Maria", new Cpf(CPF), new Telefone("11999999999"), NASCIMENTO, null, AGORA))
                 .isInstanceOf(NullPointerException.class)
                 .hasMessageContaining("documentos");
     }
@@ -119,7 +132,7 @@ class BeneficiarioTest {
     @Test
     void deveProtegerListaDeDocumentosContraAlteracaoExterna() {
         Beneficiario beneficiario = Beneficiario.novo(
-                "Maria", new Telefone("11999999999"), NASCIMENTO, documentos(), AGORA);
+                "Maria", new Cpf(CPF), new Telefone("11999999999"), NASCIMENTO, documentos(), AGORA);
 
         assertThatThrownBy(() -> beneficiario.getDocumentos()
                 .add(Documento.novo(TipoDocumento.CNH, "123", AGORA)))
@@ -127,9 +140,10 @@ class BeneficiarioTest {
     }
 
     @Test
-    void deveAtualizarDadosPreservandoIdDataDeInclusaoEDocumentos() {
+    void deveAtualizarDadosPreservandoIdCpfDataDeInclusaoEDocumentos() {
         Beneficiario original = Beneficiario.novo(
                 "Maria da Silva",
+                new Cpf(CPF),
                 new Telefone("(11) 99999-9999"),
                 NASCIMENTO,
                 documentos(),
@@ -147,6 +161,7 @@ class BeneficiarioTest {
 
         assertThat(atualizado.getId()).isEqualTo(original.getId());
         assertThat(atualizado.getNome()).isEqualTo("Maria Souza");
+        assertThat(atualizado.getCpf()).isEqualTo(original.getCpf());
         assertThat(atualizado.getTelefone().value()).isEqualTo("11988888888");
         assertThat(atualizado.getDataNascimento()).isEqualTo(novoNascimento);
         assertThat(atualizado.getDataInclusao()).isEqualTo(AGORA);
@@ -158,10 +173,10 @@ class BeneficiarioTest {
     @Test
     void deveCompararBeneficiariosPeloId() {
         Beneficiario original = Beneficiario.novo(
-                "Maria", new Telefone("11999999999"), NASCIMENTO, List.of(), AGORA);
+                "Maria", new Cpf(CPF), new Telefone("11999999999"), NASCIMENTO, List.of(), AGORA);
         Beneficiario mesmoId = new Beneficiario(
-                original.getId(), "Outra", new Telefone("11888888888"), NASCIMENTO,
-                AGORA, AGORA, List.of());
+                original.getId(), "Outra", new Cpf("11144477735"),
+                new Telefone("11888888888"), NASCIMENTO, AGORA, AGORA, List.of());
 
         assertThat(original).isEqualTo(mesmoId);
         assertThat(original).hasSameHashCodeAs(mesmoId);

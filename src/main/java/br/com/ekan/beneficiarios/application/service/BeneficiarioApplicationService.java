@@ -9,6 +9,8 @@ import br.com.ekan.beneficiarios.domain.beneficiario.Beneficiario;
 import br.com.ekan.beneficiarios.domain.beneficiario.BeneficiarioId;
 import br.com.ekan.beneficiarios.domain.beneficiario.BeneficiarioNaoEncontradoException;
 import br.com.ekan.beneficiarios.domain.beneficiario.BeneficiarioRepository;
+import br.com.ekan.beneficiarios.domain.beneficiario.Cpf;
+import br.com.ekan.beneficiarios.domain.beneficiario.CpfJaCadastradoException;
 import br.com.ekan.beneficiarios.domain.beneficiario.Documento;
 import br.com.ekan.beneficiarios.domain.beneficiario.Telefone;
 import lombok.RequiredArgsConstructor;
@@ -44,13 +46,19 @@ public class BeneficiarioApplicationService implements BeneficiarioService {
                 .map(documento -> Documento.novo(documento.tipoDocumento(), documento.descricao(), agora))
                 .toList();
 
+        Cpf cpf = new Cpf(command.cpf());
         Beneficiario beneficiario = Beneficiario.novo(
                 command.nome(),
+                cpf,
                 new Telefone(command.telefone()),
                 command.dataNascimento(),
                 documentos,
                 agora
         );
+
+        if (repository.existePorCpf(cpf)) {
+            throw new CpfJaCadastradoException();
+        }
 
         Beneficiario salvo = repository.salvar(beneficiario);
         log.info("Beneficiario cadastrado: {}", salvo.getId().value());
@@ -70,6 +78,15 @@ public class BeneficiarioApplicationService implements BeneficiarioService {
     @Transactional(readOnly = true)
     public BeneficiarioResult buscarPorId(UUID id) {
         return BeneficiarioApplicationMapper.toResult(buscarBeneficiario(id));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public BeneficiarioResult buscarPorCpf(String cpf) {
+        Cpf cpfNormalizado = new Cpf(cpf);
+        return repository.buscarPorCpf(cpfNormalizado)
+                .map(BeneficiarioApplicationMapper::toResult)
+                .orElseThrow(() -> new BeneficiarioNaoEncontradoException(cpfNormalizado.value()));
     }
 
     @Override

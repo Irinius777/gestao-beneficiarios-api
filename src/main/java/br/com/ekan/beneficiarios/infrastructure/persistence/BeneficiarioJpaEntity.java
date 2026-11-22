@@ -8,6 +8,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -16,7 +17,13 @@ import java.util.List;
 import java.util.UUID;
 
 @Entity
-@Table(name = "beneficiarios")
+@Table(
+        name = "beneficiarios",
+        uniqueConstraints = @UniqueConstraint(
+                name = "uk_beneficiarios_cpf",
+                columnNames = "cpf"
+        )
+)
 public class BeneficiarioJpaEntity {
 
     @Id
@@ -24,6 +31,9 @@ public class BeneficiarioJpaEntity {
 
     @Column(nullable = false, length = 150)
     private String nome;
+
+    @Column(nullable = false, length = 11)
+    private String cpf;
 
     @Column(nullable = false, length = 20)
     private String telefone;
@@ -46,12 +56,14 @@ public class BeneficiarioJpaEntity {
 
     public BeneficiarioJpaEntity(UUID id,
                                  String nome,
+                                 String cpf,
                                  String telefone,
                                  LocalDate dataNascimento,
                                  LocalDateTime dataInclusao,
                                  LocalDateTime dataAtualizacao) {
         this.id = id;
         this.nome = nome;
+        this.cpf = cpf;
         this.telefone = telefone;
         this.dataNascimento = dataNascimento;
         this.dataInclusao = dataInclusao;
@@ -78,6 +90,10 @@ public class BeneficiarioJpaEntity {
 
     public String getNome() {
         return nome;
+    }
+
+    public String getCpf() {
+        return cpf;
     }
 
     public String getTelefone() {

@@ -4,7 +4,6 @@ package br.com.ekan.beneficiarios.domain.beneficiario;
  * Tipos de documento aceitos no cadastro do beneficiario.
  */
 public enum TipoDocumento {
-    CPF,
     RG,
     CNH,
     CERTIDAO_NASCIMENTO,

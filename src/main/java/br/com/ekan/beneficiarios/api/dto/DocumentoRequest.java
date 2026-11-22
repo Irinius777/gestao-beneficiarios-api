@@ -9,7 +9,7 @@ import jakarta.validation.constraints.Size;
 @Schema(description = "Documento enviado no cadastro do beneficiario")
 public record DocumentoRequest(
         @NotNull(message = "tipoDocumento e obrigatorio")
-        @Schema(description = "Tipo do documento", example = "CPF")
+        @Schema(description = "Tipo do documento", example = "RG")
         TipoDocumento tipoDocumento,
 
         @NotBlank(message = "descricao e obrigatoria")

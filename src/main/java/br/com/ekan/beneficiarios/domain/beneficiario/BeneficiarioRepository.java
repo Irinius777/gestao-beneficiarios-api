@@ -12,6 +12,10 @@ public interface BeneficiarioRepository {
 
     Optional<Beneficiario> buscarPorId(BeneficiarioId id);
 
+    Optional<Beneficiario> buscarPorCpf(Cpf cpf);
+
+    boolean existePorCpf(Cpf cpf);
+
     List<Beneficiario> listarTodos();
 
     boolean remover(BeneficiarioId id);

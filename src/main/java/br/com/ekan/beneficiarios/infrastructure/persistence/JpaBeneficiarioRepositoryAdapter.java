@@ -3,7 +3,10 @@ package br.com.ekan.beneficiarios.infrastructure.persistence;
 import br.com.ekan.beneficiarios.domain.beneficiario.Beneficiario;
 import br.com.ekan.beneficiarios.domain.beneficiario.BeneficiarioId;
 import br.com.ekan.beneficiarios.domain.beneficiario.BeneficiarioRepository;
+import br.com.ekan.beneficiarios.domain.beneficiario.Cpf;
+import br.com.ekan.beneficiarios.domain.beneficiario.CpfJaCadastradoException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,13 +30,29 @@ public class JpaBeneficiarioRepositoryAdapter implements BeneficiarioRepository 
                 })
                 .orElseGet(() -> mapper.toNewEntity(beneficiario));
 
-        return mapper.toDomain(jpaRepository.save(entity));
+        try {
+            return mapper.toDomain(jpaRepository.saveAndFlush(entity));
+        } catch (DataIntegrityViolationException ex) {
+            throw new CpfJaCadastradoException();
+        }
     }
 
     @Override
     @Transactional(readOnly = true)
     public Optional<Beneficiario> buscarPorId(BeneficiarioId id) {
         return jpaRepository.findById(id.value()).map(mapper::toDomain);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<Beneficiario> buscarPorCpf(Cpf cpf) {
+        return jpaRepository.findByCpf(cpf.value()).map(mapper::toDomain);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public boolean existePorCpf(Cpf cpf) {
+        return jpaRepository.existsByCpf(cpf.value());
     }
 
     @Override

@@ -11,7 +11,7 @@ public record DocumentoResponse(
         @Schema(description = "Identificador do documento")
         UUID id,
 
-        @Schema(description = "Tipo do documento", example = "CPF")
+        @Schema(description = "Tipo do documento", example = "RG")
         TipoDocumento tipoDocumento,
 
         @Schema(description = "Descricao ou numero do documento")

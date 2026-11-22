@@ -6,6 +6,7 @@ import br.com.ekan.beneficiarios.application.dto.BeneficiarioResult;
 import br.com.ekan.beneficiarios.application.dto.DocumentoResult;
 import br.com.ekan.beneficiarios.application.service.BeneficiarioService;
 import br.com.ekan.beneficiarios.domain.beneficiario.BeneficiarioNaoEncontradoException;
+import br.com.ekan.beneficiarios.domain.beneficiario.CpfJaCadastradoException;
 import br.com.ekan.beneficiarios.domain.beneficiario.TipoDocumento;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -52,16 +53,17 @@ class BeneficiarioControllerTest {
     private final String jsonValido = """
             {
               "nome": "Maria da Silva",
+              "cpf": "529.982.247-25",
               "telefone": "(11) 99999-9999",
               "dataNascimento": "1990-05-20",
               "documentos": [
                 {
-                  "tipoDocumento": "CPF",
-                  "descricao": "123.456.789-00"
-                },
-                {
                   "tipoDocumento": "RG",
                   "descricao": "12.345.678-9"
+                },
+                {
+                  "tipoDocumento": "CNH",
+                  "descricao": "12345678900"
                 }
               ]
             }
@@ -69,9 +71,10 @@ class BeneficiarioControllerTest {
 
     private BeneficiarioResult result(UUID id) {
         DocumentoResult documento = new DocumentoResult(
-                UUID.randomUUID(), TipoDocumento.CPF, "123.456.789-00", DATA, DATA);
+                UUID.randomUUID(), TipoDocumento.RG, "12.345.678-9", DATA, DATA);
         return new BeneficiarioResult(
-                id, "Maria da Silva", "11999999999", NASCIMENTO, DATA, DATA, List.of(documento));
+                id, "Maria da Silva", "52998224725", "11999999999",
+                NASCIMENTO, DATA, DATA, List.of(documento));
     }
 
     @Test
@@ -86,10 +89,11 @@ class BeneficiarioControllerTest {
                 .andExpect(header().exists("Location"))
                 .andExpect(jsonPath("$.id").value(id.toString()))
                 .andExpect(jsonPath("$.nome").value("Maria da Silva"))
+                .andExpect(jsonPath("$.cpf").value("52998224725"))
                 .andExpect(jsonPath("$.telefone").value("11999999999"))
                 .andExpect(jsonPath("$.dataNascimento").value("1990-05-20"))
                 .andExpect(jsonPath("$.documentos", hasSize(1)))
-                .andExpect(jsonPath("$.documentos[0].tipoDocumento").value("CPF"));
+                .andExpect(jsonPath("$.documentos[0].tipoDocumento").value("RG"));
     }
 
     @Test
@@ -99,6 +103,7 @@ class BeneficiarioControllerTest {
         String json = """
                 {
                   "nome": "Maria da Silva",
+                  "cpf": "529.982.247-25",
                   "telefone": "(11) 99999-9999",
                   "dataNascimento": "1990-05-20"
                 }
@@ -137,7 +142,7 @@ class BeneficiarioControllerTest {
 
     @Test
     void deveRetornar400QuandoTipoDocumentoForInvalido() throws Exception {
-        String json = jsonValido.replace("CPF", "INVALIDO");
+        String json = jsonValido.replace("\"RG\"", "\"INVALIDO\"");
 
         mockMvc.perform(post("/v1/beneficiarios")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -148,7 +153,7 @@ class BeneficiarioControllerTest {
 
     @Test
     void deveRetornar400QuandoDescricaoDoDocumentoForVazia() throws Exception {
-        String json = jsonValido.replace("123.456.789-00", "   ");
+        String json = jsonValido.replace("12.345.678-9", "   ");
 
         mockMvc.perform(post("/v1/beneficiarios")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -175,6 +180,28 @@ class BeneficiarioControllerTest {
                         .content(jsonValido))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.detail").value("telefone invalido"));
+    }
+
+    @Test
+    void deveRetornar409QuandoCpfJaEstiverCadastrado() throws Exception {
+        when(service.criar(any())).thenThrow(new CpfJaCadastradoException());
+
+        mockMvc.perform(post("/v1/beneficiarios")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonValido))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail").value("CPF ja cadastrado"));
+    }
+
+    @Test
+    void deveRetornar400QuandoCpfForInvalido() throws Exception {
+        when(service.criar(any())).thenThrow(new IllegalArgumentException("cpf invalido"));
+
+        mockMvc.perform(post("/v1/beneficiarios")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonValido))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail").value("cpf invalido"));
     }
 
     @Test
@@ -210,6 +237,27 @@ class BeneficiarioControllerTest {
     }
 
     @Test
+    void deveBuscarBeneficiarioPorCpf() throws Exception {
+        UUID id = UUID.randomUUID();
+        when(service.buscarPorCpf("529.982.247-25")).thenReturn(result(id));
+
+        mockMvc.perform(get("/v1/beneficiarios/cpf/{cpf}", "529.982.247-25"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(id.toString()))
+                .andExpect(jsonPath("$.cpf").value("52998224725"));
+    }
+
+    @Test
+    void deveRetornar404AoBuscarCpfInexistente() throws Exception {
+        when(service.buscarPorCpf("529.982.247-25"))
+                .thenThrow(new BeneficiarioNaoEncontradoException("529.982.247-25"));
+
+        mockMvc.perform(get("/v1/beneficiarios/cpf/{cpf}", "529.982.247-25"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.detail").exists());
+    }
+
+    @Test
     void deveListarDocumentosDoBeneficiario() throws Exception {
         UUID id = UUID.randomUUID();
         when(service.listarDocumentos(id)).thenReturn(result(id).documentos());
@@ -217,7 +265,7 @@ class BeneficiarioControllerTest {
         mockMvc.perform(get("/v1/beneficiarios/{id}/documentos", id))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(1)))
-                .andExpect(jsonPath("$[0].tipoDocumento").value("CPF"));
+                .andExpect(jsonPath("$[0].tipoDocumento").value("RG"));
     }
 
     @Test

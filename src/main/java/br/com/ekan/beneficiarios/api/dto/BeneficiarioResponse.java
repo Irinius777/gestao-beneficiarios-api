@@ -15,6 +15,9 @@ public record BeneficiarioResponse(
         @Schema(description = "Nome completo")
         String nome,
 
+        @Schema(description = "CPF normalizado, somente digitos")
+        String cpf,
+
         @Schema(description = "Telefone com DDD")
         String telefone,
 

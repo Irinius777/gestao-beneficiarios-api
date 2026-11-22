@@ -27,6 +27,7 @@ public class BeneficiarioWebMapper {
 
         return new CriarBeneficiarioCommand(
                 request.nome(),
+                request.cpf(),
                 request.telefone(),
                 request.dataNascimento(),
                 documentos
@@ -49,6 +50,7 @@ public class BeneficiarioWebMapper {
         return new BeneficiarioResponse(
                 result.id(),
                 result.nome(),
+                result.cpf(),
                 result.telefone(),
                 result.dataNascimento(),
                 result.dataInclusao(),

@@ -15,6 +15,7 @@ public final class Beneficiario {
 
     private final BeneficiarioId id;
     private final String nome;
+    private final Cpf cpf;
     private final Telefone telefone;
     private final LocalDate dataNascimento;
     private final LocalDateTime dataInclusao;
@@ -23,6 +24,7 @@ public final class Beneficiario {
 
     public Beneficiario(BeneficiarioId id,
                         String nome,
+                        Cpf cpf,
                         Telefone telefone,
                         LocalDate dataNascimento,
                         LocalDateTime dataInclusao,
@@ -30,6 +32,7 @@ public final class Beneficiario {
                         List<Documento> documentos) {
         this.id = Objects.requireNonNull(id, "id do beneficiario nao pode ser nulo");
         this.nome = validarNome(nome);
+        this.cpf = Objects.requireNonNull(cpf, "cpf nao pode ser nulo");
         this.telefone = Objects.requireNonNull(telefone, "telefone nao pode ser nulo");
         this.dataNascimento = validarDataNascimento(dataNascimento);
         this.dataInclusao = Objects.requireNonNull(dataInclusao, "data de inclusao nao pode ser nula");
@@ -38,12 +41,13 @@ public final class Beneficiario {
     }
 
     public static Beneficiario novo(String nome,
+                                    Cpf cpf,
                                     Telefone telefone,
                                     LocalDate dataNascimento,
                                     List<Documento> documentos,
                                     LocalDateTime agora) {
         Objects.requireNonNull(agora, "data/hora de criacao nao pode ser nula");
-        return new Beneficiario(BeneficiarioId.novo(), nome, telefone, dataNascimento, agora, agora, documentos);
+        return new Beneficiario(BeneficiarioId.novo(), nome, cpf, telefone, dataNascimento, agora, agora, documentos);
     }
 
     public Beneficiario atualizarDados(String nome,
@@ -51,7 +55,7 @@ public final class Beneficiario {
                                        LocalDate dataNascimento,
                                        LocalDateTime agora) {
         Objects.requireNonNull(agora, "data/hora de atualizacao nao pode ser nula");
-        return new Beneficiario(id, nome, telefone, dataNascimento, dataInclusao, agora, documentos);
+        return new Beneficiario(id, nome, cpf, telefone, dataNascimento, dataInclusao, agora, documentos);
     }
 
     private static String validarNome(String nome) {
@@ -81,6 +85,10 @@ public final class Beneficiario {
 
     public String getNome() {
         return nome;
+    }
+
+    public Cpf getCpf() {
+        return cpf;
     }
 
     public Telefone getTelefone() {

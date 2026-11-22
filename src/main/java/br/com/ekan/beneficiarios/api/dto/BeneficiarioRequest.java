@@ -17,6 +17,11 @@ public record BeneficiarioRequest(
         @Schema(description = "Nome completo do beneficiario", example = "Maria da Silva")
         String nome,
 
+        @NotBlank(message = "cpf e obrigatorio")
+        @Size(max = 20, message = "cpf deve ter no maximo 20 caracteres")
+        @Schema(description = "CPF do beneficiario, com ou sem mascara", example = "529.982.247-25")
+        String cpf,
+
         @NotBlank(message = "telefone e obrigatorio")
         @Size(max = 20, message = "telefone deve ter no maximo 20 caracteres")
         @Schema(description = "Telefone com DDD", example = "(11) 99999-9999")

@@ -4,6 +4,7 @@ import java.time.LocalDate;
 import java.util.List;
 
 public record CriarBeneficiarioCommand(String nome,
+                                       String cpf,
                                        String telefone,
                                        LocalDate dataNascimento,
                                        List<DocumentoCommand> documentos) {

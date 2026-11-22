@@ -41,7 +41,8 @@ public class BeneficiarioController {
     @Operation(summary = "Cadastrar beneficiario com seus documentos")
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "Beneficiario cadastrado"),
-            @ApiResponse(responseCode = "400", description = "Dados invalidos")
+            @ApiResponse(responseCode = "400", description = "Dados invalidos"),
+            @ApiResponse(responseCode = "409", description = "CPF ja cadastrado")
     })
     public ResponseEntity<BeneficiarioResponse> criar(@Valid @RequestBody BeneficiarioRequest request) {
         BeneficiarioResult result = service.criar(mapper.toCommand(request));
@@ -68,6 +69,17 @@ public class BeneficiarioController {
     })
     public BeneficiarioResponse buscarPorId(@PathVariable UUID id) {
         return mapper.toResponse(service.buscarPorId(id));
+    }
+
+    @GetMapping("/cpf/{cpf}")
+    @Operation(summary = "Buscar beneficiario por CPF")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Beneficiario encontrado"),
+            @ApiResponse(responseCode = "400", description = "CPF invalido"),
+            @ApiResponse(responseCode = "404", description = "Beneficiario nao encontrado")
+    })
+    public BeneficiarioResponse buscarPorCpf(@PathVariable String cpf) {
+        return mapper.toResponse(service.buscarPorCpf(cpf));
     }
 
     @GetMapping("/{id}/documentos")

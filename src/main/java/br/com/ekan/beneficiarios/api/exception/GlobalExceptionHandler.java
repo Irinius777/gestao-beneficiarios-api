@@ -1,6 +1,7 @@
 package br.com.ekan.beneficiarios.api.exception;
 
 import br.com.ekan.beneficiarios.domain.beneficiario.BeneficiarioNaoEncontradoException;
+import br.com.ekan.beneficiarios.domain.beneficiario.CpfJaCadastradoException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
@@ -21,6 +22,12 @@ public class GlobalExceptionHandler {
     public ProblemDetail handleNotFound(BeneficiarioNaoEncontradoException ex) {
         log.warn("Beneficiario nao encontrado: {}", ex.getMessage());
         return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
+    }
+
+    @ExceptionHandler(CpfJaCadastradoException.class)
+    public ProblemDetail handleCpfJaCadastrado(CpfJaCadastradoException ex) {
+        log.warn("Tentativa de cadastro com CPF duplicado");
+        return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

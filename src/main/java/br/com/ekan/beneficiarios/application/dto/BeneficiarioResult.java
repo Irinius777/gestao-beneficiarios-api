@@ -7,6 +7,7 @@ import java.util.UUID;
 
 public record BeneficiarioResult(UUID id,
                                  String nome,
+                                 String cpf,
                                  String telefone,
                                  LocalDate dataNascimento,
                                  LocalDateTime dataInclusao,

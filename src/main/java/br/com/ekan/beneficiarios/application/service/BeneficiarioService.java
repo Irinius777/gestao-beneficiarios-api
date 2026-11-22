@@ -16,6 +16,8 @@ public interface BeneficiarioService {
 
     BeneficiarioResult buscarPorId(UUID id);
 
+    BeneficiarioResult buscarPorCpf(String cpf);
+
     List<DocumentoResult> listarDocumentos(UUID beneficiarioId);
 
     BeneficiarioResult atualizar(UUID id, AtualizarBeneficiarioCommand command);
