@@ -2,7 +2,7 @@
 
 API REST para gerenciamento de beneficiários de um plano de saúde e seus documentos, desenvolvida como solução para o desafio técnico da Ekan.
 
-O projeto segue uma organizacao em camadas DDD, com a camada de apresentacao no padrao MVC, codigo de dominio isolado de detalhes de persistencia e testes automatizados cobrindo dominio, aplicacao, API e integracao com banco relacional.
+> **Branch `refactor/padrao-camadas-wakanda`:** esta versão reorganiza o projeto na arquitetura em camadas usada no curso da Wakanda (pacote por feature, domínio como entidade JPA, Request/Response sem mappers). A versão original, hexagonal, continua na `main` para comparação. As diferenças estão resumidas em [Mudanças em relação à main](#mudancas-em-relacao-a-main).
 
 ## Tecnologias
 
@@ -11,49 +11,44 @@ O projeto segue uma organizacao em camadas DDD, com a camada de apresentacao no 
 - Spring Web MVC
 - Spring Data JPA / Hibernate
 - H2 Database (banco relacional embarcado)
-- Bean Validation
+- Bean Validation (incluindo `@CPF` do Hibernate Validator)
 - Springdoc OpenAPI / Swagger UI
 - Lombok
 - JUnit 5, Mockito e AssertJ
+- JaCoCo
 - Maven Wrapper
 - GitHub Actions
 
 ## Arquitetura
 
-O projeto combina MVC na camada web com DDD nas regras de negocio:
+Arquitetura em camadas, com pacotes organizados por feature:
 
 ```text
 src/main/java/br/com/ekan/beneficiarios
-├── api                  # Camada MVC: controllers, DTOs HTTP, mapper web e tratamento de erros
-│   ├── BeneficiarioController.java
-│   ├── dto
-│   ├── exception
-│   └── mapper
-├── application          # Casos de uso, commands, results e mapper de aplicacao
-│   ├── command
-│   ├── dto
-│   ├── mapper
-│   └── service
-├── domain               # Agregado, entidades, value objects, porta de repositorio e excecoes
-│   └── beneficiario
-└── infrastructure       # Adaptadores JPA, entidades de persistencia, mappers e configuracoes
-    ├── config
-    └── persistence
+├── beneficiario
+│   ├── application
+│   │   ├── api          # BeneficiarioAPI (controller) + Requests e Responses
+│   │   └── service      # BeneficiarioService, BeneficiarioApplicationService e o port BeneficiarioRepository
+│   ├── domain           # Beneficiario e Documento (@Entity), TipoDocumento e excecoes de negocio
+│   └── infra            # BeneficiarioInfraRepository + BeneficiarioSpringDataJpaRepository
+├── config               # ClockConfig e OpenApiConfig
+├── handler              # GlobalExceptionHandler (ProblemDetail)
+└── utils                # FormatacaoUtils e ValidacaoUtils
 ```
 
-### Fluxo de dependencias
+### Fluxo entre camadas
 
 ```text
-api -> application -> domain
-                         ^
-                         |
-                  infrastructure
+BeneficiarioAPI -> BeneficiarioService (BeneficiarioApplicationService) -> BeneficiarioRepository (port)
+                                                                                   ^
+                                                                                   |
+                                                         BeneficiarioInfraRepository -> BeneficiarioSpringDataJpaRepository
 ```
 
-- `domain` nao conhece Spring, JPA ou HTTP.
-- `application` orquestra os casos de uso e depende apenas do dominio.
-- `infrastructure` implementa a porta `BeneficiarioRepository` com JPA/H2.
-- `api` traduz HTTP para comandos da aplicacao e respostas da aplicacao para JSON.
+- **API**: recebe e valida o Request (Bean Validation) e delega ao service. Responde com `@ResponseStatus`.
+- **Service**: orquestra o caso de uso, controla a transação e monta o Response a partir do domínio (`new BeneficiarioDetalhadoResponse(beneficiario)`).
+- **Domain**: entidades JPA com comportamento. O agregado é criado a partir do Request (`new Beneficiario(request, agora)`) e alterado por métodos de negócio (`altera(request, agora)`), sem setters.
+- **Infra**: implementa o port com Spring Data, lança `BeneficiarioNaoEncontradoException` e traduz a violação de CPF único para `CpfJaCadastradoException`.
 
 ### Modelo de dominio
 
@@ -63,10 +58,10 @@ Beneficiario 1 ───── * Documento
 
 **Beneficiario**
 
-- `id` (UUID)
+- `idBeneficiario` (UUID gerado pelo JPA)
 - `nome`
-- `cpf` (value object normalizado, validado e único)
-- `telefone` (value object normalizado para 10 ou 11 dígitos)
+- `cpf` (validado no Request, guardado só com dígitos e único)
+- `telefone` (validado no Request, guardado só com dígitos)
 - `dataNascimento`
 - `dataInclusao`
 - `dataAtualizacao`
@@ -74,34 +69,34 @@ Beneficiario 1 ───── * Documento
 
 **Documento**
 
-- `id` (UUID)
+- `idDocumento` (UUID gerado pelo JPA)
 - `tipoDocumento` (`RG`, `CNH`, `CERTIDAO_NASCIMENTO`, `COMPROVANTE_RESIDENCIA`, `OUTRO`)
 - `descricao`
 - `dataInclusao`
 - `dataAtualizacao`
 
-`Beneficiario` é a raiz do agregado. `Documento` é uma entidade filha e só deve ser alterada por meio do agregado. A lista de documentos é imutável fora do domínio.
+`Beneficiario` é a raiz do agregado. `Documento` tem construtor package-private, então só o agregado cria documentos, e a lista exposta por `getDocumentos()` é somente leitura.
 
-O CPF foi promovido a atributo do beneficiário por ser uma chave natural do negócio. Ele é validado no domínio (incluindo os dígitos verificadores), normalizado para apenas dígitos e protegido por uma constraint de unicidade no banco. Por isso, `CPF` não é mais aceito como `TipoDocumento`; os documentos ficam reservados para RG, CNH, certidão, comprovante e outros.
+O CPF é a chave natural do beneficiário: validado no Request (incluindo os dígitos verificadores), guardado só com dígitos e protegido por uma constraint de unicidade no banco.
 
 ## Endpoints
 
-Base URL: `http://localhost:8080`
+Base URL: `http://localhost:8080/ekan-beneficiarios/api`
 
-| Metodo | Endpoint | Descricao |
-|---|---|---|
-| `POST` | `/v1/beneficiarios` | Cadastra um beneficiario com seus documentos |
-| `GET` | `/v1/beneficiarios` | Lista todos os beneficiarios |
-| `GET` | `/v1/beneficiarios/{id}` | Busca um beneficiario por id |
-| `GET` | `/v1/beneficiarios/cpf/{cpf}` | Busca um beneficiario por CPF, com ou sem mascara |
-| `GET` | `/v1/beneficiarios/{id}/documentos` | Lista os documentos de um beneficiario |
-| `PUT` | `/v1/beneficiarios/{id}` | Atualiza os dados cadastrais do beneficiario |
-| `DELETE` | `/v1/beneficiarios/{id}` | Remove o beneficiario e seus documentos |
+| Metodo | Endpoint | Status | Descricao |
+|---|---|---|---|
+| `POST` | `/beneficiario` | `201` | Cadastra um beneficiario com seus documentos e devolve o id |
+| `GET` | `/beneficiario` | `200` | Lista os beneficiarios em ordem alfabetica, sem os documentos |
+| `GET` | `/beneficiario/{idBeneficiario}` | `200` | Busca um beneficiario por id, com os documentos |
+| `GET` | `/beneficiario/cpf/{cpf}` | `200` | Busca um beneficiario por CPF, com ou sem mascara |
+| `GET` | `/beneficiario/{idBeneficiario}/documentos` | `200` | Lista os documentos de um beneficiario |
+| `PUT` | `/beneficiario/{idBeneficiario}` | `200` | Atualiza os dados cadastrais do beneficiario |
+| `DELETE` | `/beneficiario/{idBeneficiario}` | `204` | Remove o beneficiario e seus documentos |
 
 ### Exemplo de cadastro
 
 ```http
-POST /v1/beneficiarios
+POST /ekan-beneficiarios/api/beneficiario
 Content-Type: application/json
 ```
 
@@ -128,7 +123,21 @@ Resposta `201 Created`:
 
 ```json
 {
-  "id": "3c1f0e6a-6d7b-4f1e-9c2a-0b7d5e4f8a11",
+  "idBeneficiario": "3c1f0e6a-6d7b-4f1e-9c2a-0b7d5e4f8a11"
+}
+```
+
+### Exemplo de consulta por id
+
+```http
+GET /ekan-beneficiarios/api/beneficiario/3c1f0e6a-6d7b-4f1e-9c2a-0b7d5e4f8a11
+```
+
+Resposta `200 OK`:
+
+```json
+{
+  "idBeneficiario": "3c1f0e6a-6d7b-4f1e-9c2a-0b7d5e4f8a11",
   "nome": "Maria da Silva",
   "cpf": "52998224725",
   "telefone": "11999999999",
@@ -137,16 +146,9 @@ Resposta `201 Created`:
   "dataAtualizacao": "2026-01-15T10:00:00",
   "documentos": [
     {
-      "id": "a1b2c3d4-1111-2222-3333-444455556666",
+      "idDocumento": "a1b2c3d4-1111-2222-3333-444455556666",
       "tipoDocumento": "RG",
       "descricao": "12.345.678-9",
-      "dataInclusao": "2026-01-15T10:00:00",
-      "dataAtualizacao": "2026-01-15T10:00:00"
-    },
-    {
-      "id": "b2c3d4e5-2222-3333-4444-555566667777",
-      "tipoDocumento": "CNH",
-      "descricao": "12345678900",
       "dataInclusao": "2026-01-15T10:00:00",
       "dataAtualizacao": "2026-01-15T10:00:00"
     }
@@ -157,7 +159,7 @@ Resposta `201 Created`:
 ### Exemplo de atualizacao
 
 ```http
-PUT /v1/beneficiarios/{id}
+PUT /ekan-beneficiarios/api/beneficiario/{idBeneficiario}
 Content-Type: application/json
 ```
 
@@ -169,15 +171,15 @@ Content-Type: application/json
 }
 ```
 
-A atualização altera apenas nome, telefone e data de nascimento. O CPF e os documentos são preservados; os documentos podem ser consultados pelo endpoint `/v1/beneficiarios/{id}/documentos`.
+A atualização altera apenas nome, telefone e data de nascimento. O CPF e os documentos são preservados.
 
 ### Exemplo de consulta por CPF
 
 ```http
-GET /v1/beneficiarios/cpf/529.982.247-25
+GET /ekan-beneficiarios/api/beneficiario/cpf/529.982.247-25
 ```
 
-A mascara é opcional. O endpoint aceita `529.982.247-25` e `52998224725`. O CPF devolvido na resposta fica normalizado, apenas com dígitos.
+A mascara é opcional. O endpoint aceita `529.982.247-25` e `52998224725`; um CPF inválido devolve `400`.
 
 ### Erros
 
@@ -189,10 +191,10 @@ Os erros seguem o formato `ProblemDetail` do Spring:
   "title": "Erro de validacao",
   "status": 400,
   "detail": "Um ou mais campos sao invalidos",
-  "instance": "/v1/beneficiarios",
+  "instance": "/ekan-beneficiarios/api/beneficiario",
   "errors": [
     "nome: nome e obrigatorio",
-    "dataNascimento: dataNascimento deve ser uma data passada"
+    "cpf: cpf invalido"
   ]
 }
 ```
@@ -206,13 +208,23 @@ Status tratados:
 
 ## Validacoes
 
-- `nome`: obrigatorio, no maximo 150 caracteres.
-- `cpf`: obrigatorio, 11 digitos apos normalizacao e digitos verificadores validos.
-- `telefone`: obrigatorio, deve conter 10 ou 11 digitos.
+Validações de formato ficam nos Requests (Bean Validation); invariantes do negócio ficam no construtor e nos métodos do domínio.
+
+- `nome`: obrigatorio, no maximo 150 caracteres (espaços nas pontas são removidos).
+- `cpf`: obrigatorio e valido (`@CPF`, com ou sem mascara).
+- `telefone`: obrigatorio, DDD + 8 ou 9 digitos, com ou sem mascara.
 - `dataNascimento`: obrigatoria e nao pode ser futura.
 - `documentos`: lista opcional; quando enviada, cada documento exige `tipoDocumento` e `descricao`.
 - `descricao` do documento: obrigatoria, no maximo 255 caracteres.
 - O CPF é unico no banco. A aplicacao verifica antes de salvar e o banco garante a regra em caso de concorrencia.
+
+## Logs
+
+Os logs seguem o formato `[marcador] mensagem` e registram só informação que agrega valor:
+
+- `[request]`: uma linha por requisição no controller, apenas com dados não sensíveis (ids e tipos de documento; nunca nome, CPF, telefone ou data de nascimento).
+- `[beneficiario-criado]`, `[beneficiario-atualizado]`, `[beneficiario-removido]`: resultado das operações de escrita no service.
+- `[cpf-duplicado]`: tentativa de cadastro com CPF existente (sem logar o CPF).
 
 ## Como executar
 
@@ -235,24 +247,24 @@ No Linux/macOS:
 ./mvnw spring-boot:run
 ```
 
-A aplicacao sobe em `http://localhost:8080`.
+A aplicacao sobe em `http://localhost:8080/ekan-beneficiarios/api`.
 
 ### Swagger UI
 
 ```text
-http://localhost:8080/swagger-ui.html
+http://localhost:8080/ekan-beneficiarios/api/swagger-ui.html
 ```
 
 Especificacao OpenAPI:
 
 ```text
-http://localhost:8080/v3/api-docs
+http://localhost:8080/ekan-beneficiarios/api/v3/api-docs
 ```
 
 ### Console do H2
 
 ```text
-http://localhost:8080/h2-console
+http://localhost:8080/ekan-beneficiarios/api/h2-console
 ```
 
 Configuracao:
@@ -263,7 +275,7 @@ User Name: sa
 Password: (vazio)
 ```
 
-O banco fica no diretorio `./data`, que nao e versionado. Para zerar os dados, pare a aplicacao e remova a pasta `data`.
+O banco fica no diretorio `./data`, que nao e versionado. Para zerar os dados, pare a aplicacao e remova a pasta `data`. Ao trocar da `main` para esta branch, remova a pasta: as colunas de id mudaram (`id_beneficiario`, `id_documento`).
 
 ### Profile de producao
 
@@ -281,7 +293,7 @@ Para executar todos os testes:
 ./mvnw test
 ```
 
-Para executar a verificacao completa do build:
+Para executar a verificacao completa do build, com relatorio de cobertura do JaCoCo em `target/site/jacoco/index.html`:
 
 ```bash
 ./mvnw verify
@@ -289,24 +301,42 @@ Para executar a verificacao completa do build:
 
 A suite cobre:
 
-- Regras de dominio do agregado `Beneficiario`, da entidade `Documento` e dos value objects `Telefone` e `Cpf`.
-- Casos de uso da camada de aplicacao com Mockito e `Clock` fixo, incluindo CPF duplicado e consulta por CPF.
-- Contrato HTTP com `@WebMvcTest`, validacao, serializacao e tratamento de erros, incluindo `409` para CPF duplicado.
-- Integracao real com Spring, JPA e H2, incluindo persistencia, atualizacao, remocao em cascata, constraint unica de CPF e consultas.
+- Regras de dominio de `Beneficiario` e `Documento`.
+- Casos de uso do `BeneficiarioApplicationService` com Mockito e `Clock` fixo.
+- Contrato HTTP com `@WebMvcTest`: Bean Validation (CPF, telefone, datas), serializacao e tratamento de erros.
+- Integracao real com Spring, JPA e H2: persistencia, atualizacao, remocao em cascata, constraint unica de CPF e ordenacao.
 
-Os testes de integracao usam o profile `test` com H2 em memoria, isolado do banco de arquivo da aplicacao.
+Os dados de teste ficam centralizados em `BeneficiarioDataHelper`. Os testes de integracao usam o profile `test` com H2 em memoria.
 
 ## Decisoes de projeto
 
-- **DDD pragmatico**: o dominio e isolado de frameworks; a persistencia usa entidades JPA separadas e mappers explicitos.
-- **MVC na borda**: controllers recebem DTOs HTTP, traduzem para commands e devolvem responses. As regras nao ficam no controller.
-- **Agregado imutavel**: operacoes de atualizacao retornam uma nova instancia de `Beneficiario`, preservando id, CPF, data de inclusao e documentos.
-- **CPF como chave natural**: value object validado, coluna unica no banco, consulta dedicada e CPF imutavel via `PUT`.
-- **UUID como identificador**: evita dependencia de sequencia do banco e facilita a geracao no dominio.
+- **Camadas por feature**: tudo o que é de beneficiário fica em `beneficiario/`, separado em `application/api`, `application/service`, `domain` e `infra`.
+- **Domínio como entidade JPA**: evita duplicar o modelo (entidade de domínio + entidade de persistência + mappers). As regras continuam no domínio, por meio de construtor e métodos de negócio.
+- **Request/Response sem mappers**: o domínio é criado a partir do Request e o Response a partir do domínio, cada um no próprio construtor.
+- **Port/Adapter de repositório**: o service depende só de `BeneficiarioRepository`; o Spring Data fica escondido em `infra`.
+- **`@Transactional` só onde precisa**: escritas no service e leituras que navegam o agregado (`readOnly = true`). A listagem é uma única consulta e o adapter não abre transações próprias.
+- **CPF como chave natural**: validado com `@CPF`, coluna única no banco, consulta dedicada e imutável via `PUT`.
 - **Clock injetado**: permite testar datas de inclusao e atualizacao de forma deterministica.
 - **H2 em arquivo**: atende ao requisito de banco relacional e mantem os dados entre reinicios. Em testes, o H2 e em memoria.
 - **ProblemDetail**: padroniza respostas de erro conforme a especificacao HTTP.
 - **Sem autenticacao**: item opcional no desafio; a API foi mantida focada nos requisitos obrigatorios.
+
+## Mudancas em relacao a main
+
+| Tema | `main` (hexagonal) | Esta branch (camadas Wakanda) |
+|---|---|---|
+| Pacotes | Por camada (`api`, `application`, `domain`, `infrastructure`) | Por feature (`beneficiario/application/api`, `.../service`, `domain`, `infra`) |
+| Persistência | `BeneficiarioJpaEntity` + `BeneficiarioPersistenceMapper` | O próprio `Beneficiario` é a `@Entity` |
+| Contratos | `Command`, `Result`, `BeneficiarioWebMapper`, `BeneficiarioApplicationMapper` | `BeneficiarioNovoRequest`, `BeneficiarioAlteracaoRequest`, `BeneficiarioCriadoResponse`, `BeneficiarioDetalhadoResponse`, `BeneficiarioListResponse` |
+| Port do repositório | Em `domain` | Em `application/service` |
+| Nomes | `BeneficiarioController`, `JpaBeneficiarioRepositoryAdapter`, `BeneficiarioJpaRepository` | `BeneficiarioAPI`, `BeneficiarioInfraRepository`, `BeneficiarioSpringDataJpaRepository` |
+| Modelo | Imutável, factory `novo()`, IDs tipados, VOs `Cpf`/`Telefone` | Mutável por métodos de negócio, construtor público, `UUID` gerado pelo JPA, CPF/telefone validados no Request |
+| Respostas HTTP | `ResponseEntity` + header `Location`; POST devolve o beneficiário completo | `@ResponseStatus`; POST devolve só o `idBeneficiario`; listagem sem documentos |
+| URL | `/v1/beneficiarios` | context-path `/ekan-beneficiarios/api` + `/beneficiario` |
+| Not found | Port devolve `Optional`, service lança a exceção | Adapter lança a exceção (`buscarPorId` devolve a entidade) |
+| Logs | `@Slf4j`, poucos eventos | `@Log4j2`, `[request]` no controller e eventos de escrita no service, sem dados sensíveis |
+| Transações | Em todos os métodos do service e do adapter | Só nas escritas e nas leituras que navegam o agregado |
+| Testes | Dados inline | `BeneficiarioDataHelper` + JaCoCo |
 
 ## Limitacoes e proximos passos
 
@@ -315,7 +345,6 @@ Os testes de integracao usam o profile `test` com H2 em memoria, isolado do banc
 - Adicionar paginacao e filtros na listagem de beneficiarios.
 - Criar endpoints para atualizar ou remover documentos individualmente.
 - Criar um fluxo especifico para correção de CPF, caso o negócio permita alterar a chave natural.
-- Adicionar testes de contrato com Testcontainers para um banco externo.
 
 ## CI
 
